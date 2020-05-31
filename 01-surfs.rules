@@ -1,0 +1,1 @@
+KERNEL=="sd*", SUBSYSTEM=="block", ACTION=="add|change", PROGRAM="/etc/surfs_local/mp_name.sh %k", ENV{MP_NAME}="%c{1}"

@@ -1,0 +1,86 @@
+#!/bin/bash
+
+NAME=$1
+TYPE="none"
+DEV_PATH=`udevadm info -q all -n /dev/$NAME | grep DEVPATH | awk -F '=' '{print $2}'`
+
+function sas_mp_name()
+{
+    PHY=`cat /sys${DEV_PATH}/../../../../sas_device/end_device-*/phy_identifier`
+    ADDR=`cat /sys${DEV_PATH}/../../../../sas_device/end_device-*/enclosure_identifier`
+    EXP_ADDR=${ADDR:2:14}
+    FOB="f"
+
+    SGS=`lsscsi -g | grep SAS2X36 | awk '{print $NF}'`
+    for SG in ${SGS}
+    do
+        SWITCH=`sg_ses --page 0x07 ${SG} | grep ${EXP_ADDR}`
+        if [ $? == 0 ]
+        then
+            SLOT=`sg_ses --page 0x07 ${SG} | grep 'Slot 24'`
+                if [ $? == 0 ]
+                then
+                    FOB="f"
+                else
+                    FOB="b"
+                fi
+        fi
+    done
+    echo "JBOD_${EXP_ADDR}_${FOB}_phy${PHY}"
+    exit 0
+}
+
+function iscsi_mp_name()
+{
+    TAG_PATH=`udevadm info -q all -n /dev/$NAME | grep ID_PATH_TAG`
+    if [ $? -ne 0 ]
+    then
+        exit 1
+    fi
+    TMP=`echo $TAG_PATH | grep 'surfslocal_surmd'`
+    if [ $? -ne 0 ]
+    then
+        exit 2
+    fi
+    NAME=`echo $TAG_PATH | awk -F '_surfslocal_' '{print $2}' | awk -F '-lun-' '{print $1}'`
+    echo "mp_$NAME"
+    exit 0
+}
+
+function md_mp_name()
+{
+    MD_NAME=`udevadm info -q all -n /dev/$NAME | grep MD_DEVNAME`
+    if [ $? -ne 0 ]
+    then
+        exit 1
+    fi
+    TMP=`echo $MD_NAME | grep 'surmd'`
+    if [ $? -ne 0 ]
+    then
+        exit 2
+    fi
+    NAME=`echo $MD_NAME | awk -F '=' '{print $2}'`
+    echo "mp_$NAME"
+    exit 0
+}
+
+
+TMP=`echo $DEV_PATH | grep expander`
+if [ $? -eq 0 ]
+then
+    sas_mp_name
+fi
+
+exit 1
+
+#TMP=`echo $DEV_PATH | grep session`
+#if [ $? -eq 0 ]
+#then
+#    iscsi_mp_name
+#fi
+
+#TMP=`echo $DEV_PATH | grep 'virtual/block/md'`
+#if [ $? -eq 0 ]
+#then
+#    md_mp_name
+#fi
